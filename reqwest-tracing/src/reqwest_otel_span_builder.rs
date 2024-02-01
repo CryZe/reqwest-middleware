@@ -1,24 +1,23 @@
 use std::borrow::Cow;
 
 use matchit::Router;
-use reqwest::header::{HeaderMap, HeaderValue};
-use reqwest::{Request, Response, StatusCode as RequestStatusCode, Url};
+use reqwest::{header::HeaderValue, Request, Response, StatusCode as RequestStatusCode, Url};
 use reqwest_middleware::{Error, Result};
 use task_local_extensions::Extensions;
 use tracing::{warn, Span};
 
 use crate::reqwest_otel_span;
 
-/// The `http.method` field added to the span by [`reqwest_otel_span`]
-pub const HTTP_METHOD: &str = "http.method";
-/// The `http.scheme` field added to the span by [`reqwest_otel_span`]
-pub const HTTP_SCHEME: &str = "http.scheme";
-/// The `http.host` field added to the span by [`reqwest_otel_span`]
-pub const HTTP_HOST: &str = "http.host";
-/// The `http.url` field added to the span by [`reqwest_otel_span`]
-pub const HTTP_URL: &str = "http.url";
-/// The `host.port` field added to the span by [`reqwest_otel_span`]
-pub const NET_HOST_PORT: &str = "net.host.port";
+// /// The `http.method` field added to the span by [`reqwest_otel_span`]
+// pub const HTTP_METHOD: &str = "http.method";
+// /// The `http.scheme` field added to the span by [`reqwest_otel_span`]
+// pub const HTTP_SCHEME: &str = "http.scheme";
+// /// The `http.host` field added to the span by [`reqwest_otel_span`]
+// pub const HTTP_HOST: &str = "http.host";
+// /// The `http.url` field added to the span by [`reqwest_otel_span`]
+// pub const HTTP_URL: &str = "http.url";
+// /// The `host.port` field added to the span by [`reqwest_otel_span`]
+// pub const NET_HOST_PORT: &str = "net.host.port";
 /// The `otel.kind` field added to the span by [`reqwest_otel_span`]
 pub const OTEL_KIND: &str = "otel.kind";
 /// The `otel.name` field added to the span by [`reqwest_otel_span`]
@@ -29,10 +28,18 @@ pub const OTEL_STATUS_CODE: &str = "otel.status_code";
 pub const ERROR_MESSAGE: &str = "error.message";
 /// The `error.cause_chain` field added to the span by [`reqwest_otel_span`]
 pub const ERROR_CAUSE_CHAIN: &str = "error.cause_chain";
-/// The `http.status_code` field added to the span by [`reqwest_otel_span`]
-pub const HTTP_STATUS_CODE: &str = "http.status_code";
-/// The `http.user_agent` added to the span by [`reqwest_otel_span`]
-pub const HTTP_USER_AGENT: &str = "http.user_agent";
+// /// The `http.status_code` field added to the span by [`reqwest_otel_span`]
+// pub const HTTP_STATUS_CODE: &str = "http.status_code";
+// /// The `http.user_agent` added to the span by [`reqwest_otel_span`]
+// pub const HTTP_USER_AGENT: &str = "http.user_agent";
+
+pub const HTTP_REQUEST_METHOD: &str = "http.request.method";
+pub const URL_SCHEME: &str = "url.scheme";
+pub const SERVER_ADDRESS: &str = "server.address";
+pub const SERVER_PORT: &str = "server.port";
+pub const URL_FULL: &str = "url.full";
+pub const USER_AGENT_ORIGINAL: &str = "user_agent.original";
+pub const HTTP_RESPONSE_STATUS_CODE: &str = "http.response.status_code";
 
 /// [`ReqwestOtelSpanBackend`] allows you to customise the span attached by
 /// [`TracingMiddleware`] to incoming requests.
@@ -61,12 +68,10 @@ pub fn default_on_request_end(span: &Span, outcome: &Result<Response>) {
 #[inline]
 pub fn default_on_request_success(span: &Span, response: &Response) {
     let span_status = get_span_status(response.status());
-    let user_agent = get_header_value("user_agent", response.headers());
     if let Some(span_status) = span_status {
         span.record(OTEL_STATUS_CODE, span_status);
     }
-    span.record(HTTP_STATUS_CODE, response.status().as_u16());
-    span.record(HTTP_USER_AGENT, user_agent.as_str());
+    span.record(HTTP_RESPONSE_STATUS_CODE, response.status().as_u16());
 }
 
 /// Populates default failure fields for a given [`reqwest_otel_span!`] span.
@@ -79,7 +84,7 @@ pub fn default_on_request_failure(span: &Span, e: &Error) {
     span.record(ERROR_CAUSE_CHAIN, error_cause_chain.as_str());
     if let Error::Reqwest(e) = e {
         if let Some(status) = e.status() {
-            span.record(HTTP_STATUS_CODE, status.as_u16());
+            span.record(HTTP_RESPONSE_STATUS_CODE, status.as_u16());
         }
     }
 }
@@ -120,11 +125,6 @@ impl ReqwestOtelSpanBackend for DefaultSpanBackend {
     fn on_request_end(span: &Span, outcome: &Result<Response>, _: &mut Extensions) {
         default_on_request_end(span, outcome)
     }
-}
-
-fn get_header_value(key: &str, headers: &HeaderMap) -> String {
-    let header_default = &HeaderValue::from_static("");
-    format!("{:?}", headers.get(key).unwrap_or(header_default)).replace('"', "")
 }
 
 /// Similar to [`DefaultSpanBackend`] but also adds the `http.url` attribute to request spans.
